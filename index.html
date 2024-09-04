@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exporter un Modèle 3D</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+        }
+
+        #canvasContainer {
+            width: 80%;
+            height: 60vh;
+            margin-top: 20px;
+            border: 1px solid #ccc;
+        }
+
+        h1 {
+            margin: 20px 0;
+        }
+
+        input, button {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Créer et Exporter un Modèle 3D</h1>
+    <input type="file" id="uploadLeft" accept="image/*">
+    <button id="generate">Créer le Modèle 3D</button>
+    <button id="export">Exporter en .glb</button>
+    <div id="canvasContainer"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/exporters/GLTFExporter.js"></script>
+    <script>
+        let scene, camera, renderer, mesh;
+
+        document.getElementById('generate').addEventListener('click', () => {
+            const fileLeft = document.getElementById('uploadLeft').files[0];
+
+            if (!fileLeft) {
+                alert('Veuillez sélectionner une image.');
+                console.error('Aucune image sélectionnée.');
+                return;
+            }
+
+            console.log('Images chargées, préparation de la scène...');
+
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0xd3d3d3); // Définir la couleur de fond de la scène
+            document.getElementById('canvasContainer').innerHTML = ''; 
+            document.getElementById('canvasContainer').appendChild(renderer.domElement);
+
+            const textureLoader = new THREE.TextureLoader();
+            const url = URL.createObjectURL(fileLeft);
+
+            textureLoader.load(url, (texture) => {
+                texture.encoding = THREE.sRGBEncoding;
+                texture.needsUpdate = true;
+
+                // Forcer l'ajout du mimeType manuellement
+                texture.userData = { mimeType: 'image/jpeg' }; // Ajuster selon le type réel de l'image (e.g., 'image/png')
+
+                console.log('Texture créée avec succès.');
+                createMesh(texture);
+            }, undefined, (error) => {
+                console.error('Erreur lors du chargement de la texture :', error);
+            });
+        });
+
+        function createMesh(texture) {
+            console.log('Création du maillage 3D.');
+
+            const aspectRatio = texture.image.width / texture.image.height;
+            const geometry = new THREE.PlaneGeometry(aspectRatio, 1, 100, 100);
+
+            // Utiliser la texture dans le matériau pour l'exportation
+            const material = new THREE.MeshBasicMaterial({
+                map: texture,
+                side: THREE.DoubleSide,
+            });
+
+            mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+            camera.position.z = 1.5;
+
+            function animate() {
+                requestAnimationFrame(animate);
+                mesh.rotation.y += 0.005; 
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        // Fonction d'exportation en .glb
+        document.getElementById('export').addEventListener('click', () => {
+            if (!mesh) {
+                alert('Aucun modèle à exporter.');
+                return;
+            }
+
+            const exporter = new THREE.GLTFExporter();
+            const options = {
+                binary: true, // Forcer l'exportation en binaire
+                embedImages: true, // Intégrer les images si possible
+                forcePowerOfTwoTextures: true, // S'assurer que les textures sont compatibles
+                maxTextureSize: 1024 // Limiter la taille des textures pour éviter les incompatibilités
+            };
+
+            exporter.parse(
+                scene,
+                (result) => {
+                    // Vérifier si le résultat est bien un ArrayBuffer pour GLB
+                    if (result instanceof ArrayBuffer) {
+                        const blob = new Blob([result], { type: 'model/gltf-binary' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = 'model.glb';
+                        link.click();
+                        console.log('Exportation réussie.');
+                    } else if (typeof result === 'object') {
+                        console.warn('Exportation réussie en .gltf, mais non binaire.');
+                        const blob = new Blob([JSON.stringify(result)], { type: 'application/json' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = 'model.gltf';
+                        link.click();
+                    } else {
+                        console.error('Le résultat exporté n\'est pas un ArrayBuffer.', result);
+                    }
+                },
+                options
+            );
+        });
+    </script>
+</body>
+</html>

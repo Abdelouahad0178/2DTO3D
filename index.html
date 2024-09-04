@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Exporter un Modèle 3D</title>
+    <title>Test Modèle 3D avec Textures</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -34,78 +34,96 @@
     </style>
 </head>
 <body>
-    <h1>Créer et Exporter un Modèle 3D</h1>
-    <input type="file" id="uploadLeft" accept="image/*">
+    <h1>Test Modèle 3D avec Trois Images</h1>
+    <input type="file" id="uploadFront" accept="image/*">
+    <input type="file" id="uploadBack" accept="image/*">
+    <input type="file" id="uploadSide" accept="image/*">
     <button id="generate">Créer le Modèle 3D</button>
     <button id="export">Exporter en .glb</button>
     <div id="canvasContainer"></div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/exporters/GLTFExporter.js"></script>
+    <!-- Bibliothèques chargées depuis les sources officielles -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+    
     <script>
         let scene, camera, renderer, mesh;
 
         document.getElementById('generate').addEventListener('click', () => {
-            const fileLeft = document.getElementById('uploadLeft').files[0];
+            const fileFront = document.getElementById('uploadFront').files[0];
+            const fileBack = document.getElementById('uploadBack').files[0];
+            const fileSide = document.getElementById('uploadSide').files[0];
 
-            if (!fileLeft) {
-                alert('Veuillez sélectionner une image.');
-                console.error('Aucune image sélectionnée.');
+            if (!fileFront || !fileBack || !fileSide) {
+                alert('Veuillez sélectionner les trois images.');
+                console.error('Images manquantes.');
                 return;
             }
 
-            console.log('Images chargées, préparation de la scène...');
-
+            // Initialisation de la scène
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer();
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setClearColor(0xd3d3d3); // Définir la couleur de fond de la scène
+            renderer.setClearColor(0xd3d3d3);
             document.getElementById('canvasContainer').innerHTML = ''; 
             document.getElementById('canvasContainer').appendChild(renderer.domElement);
 
             const textureLoader = new THREE.TextureLoader();
-            const url = URL.createObjectURL(fileLeft);
 
-            textureLoader.load(url, (texture) => {
-                texture.encoding = THREE.sRGBEncoding;
-                texture.needsUpdate = true;
-
-                // Forcer l'ajout du mimeType manuellement
-                texture.userData = { mimeType: 'image/jpeg' }; // Ajuster selon le type réel de l'image (e.g., 'image/png')
-
-                console.log('Texture créée avec succès.');
-                createMesh(texture);
-            }, undefined, (error) => {
-                console.error('Erreur lors du chargement de la texture :', error);
+            // Chargement des textures et création du maillage
+            Promise.all([
+                loadTexture(textureLoader, fileFront, 'avant'),
+                loadTexture(textureLoader, fileBack, 'arrière'),
+                loadTexture(textureLoader, fileSide, 'côté')
+            ]).then(([frontTexture, backTexture, sideTexture]) => {
+                createMesh(frontTexture, backTexture, sideTexture);
+            }).catch(error => {
+                console.error('Erreur lors du chargement des textures:', error);
             });
         });
 
-        function createMesh(texture) {
-            console.log('Création du maillage 3D.');
-
-            const aspectRatio = texture.image.width / texture.image.height;
-            const geometry = new THREE.PlaneGeometry(aspectRatio, 1, 100, 100);
-
-            // Utiliser la texture dans le matériau pour l'exportation
-            const material = new THREE.MeshBasicMaterial({
-                map: texture,
-                side: THREE.DoubleSide,
+        function loadTexture(loader, file, faceName) {
+            return new Promise((resolve, reject) => {
+                const url = URL.createObjectURL(file);
+                loader.load(url, (texture) => {
+                    texture.userData = { mimeType: file.type || 'image/jpeg' };
+                    console.log(`Texture ${faceName} chargée avec succès :`, texture);
+                    resolve(texture);
+                }, undefined, (error) => {
+                    reject(`Erreur lors du chargement de la texture ${faceName}: ${error}`);
+                });
             });
+        }
 
-            mesh = new THREE.Mesh(geometry, material);
+        function createMesh(frontTexture, backTexture, sideTexture) {
+            console.log('Création du maillage 3D avec trois textures.');
+
+            // Matériaux pour chaque face du cube
+            const materials = [
+                new THREE.MeshBasicMaterial({ map: sideTexture, side: THREE.DoubleSide }), // gauche
+                new THREE.MeshBasicMaterial({ map: sideTexture, side: THREE.DoubleSide }), // droite
+                new THREE.MeshBasicMaterial({ map: frontTexture, side: THREE.DoubleSide }), // avant
+                new THREE.MeshBasicMaterial({ map: backTexture, side: THREE.DoubleSide }), // arrière
+                new THREE.MeshBasicMaterial({ color: 0xffffff }), // dessus
+                new THREE.MeshBasicMaterial({ color: 0xffffff })  // dessous
+            ];
+
+            // Création du cube avec les matériaux spécifiés
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            mesh = new THREE.Mesh(geometry, materials);
             scene.add(mesh);
-            camera.position.z = 1.5;
+            camera.position.z = 2;
 
+            // Animation du modèle 3D
             function animate() {
                 requestAnimationFrame(animate);
-                mesh.rotation.y += 0.005; 
+                mesh.rotation.y += 0.005;
                 renderer.render(scene, camera);
             }
             animate();
         }
 
-        // Fonction d'exportation en .glb
         document.getElementById('export').addEventListener('click', () => {
             if (!mesh) {
                 alert('Aucun modèle à exporter.');
@@ -113,37 +131,16 @@
             }
 
             const exporter = new THREE.GLTFExporter();
-            const options = {
-                binary: true, // Forcer l'exportation en binaire
-                embedImages: true, // Intégrer les images si possible
-                forcePowerOfTwoTextures: true, // S'assurer que les textures sont compatibles
-                maxTextureSize: 1024 // Limiter la taille des textures pour éviter les incompatibilités
-            };
+            const options = { binary: true };
 
-            exporter.parse(
-                scene,
-                (result) => {
-                    // Vérifier si le résultat est bien un ArrayBuffer pour GLB
-                    if (result instanceof ArrayBuffer) {
-                        const blob = new Blob([result], { type: 'model/gltf-binary' });
-                        const link = document.createElement('a');
-                        link.href = URL.createObjectURL(blob);
-                        link.download = 'model.glb';
-                        link.click();
-                        console.log('Exportation réussie.');
-                    } else if (typeof result === 'object') {
-                        console.warn('Exportation réussie en .gltf, mais non binaire.');
-                        const blob = new Blob([JSON.stringify(result)], { type: 'application/json' });
-                        const link = document.createElement('a');
-                        link.href = URL.createObjectURL(blob);
-                        link.download = 'model.gltf';
-                        link.click();
-                    } else {
-                        console.error('Le résultat exporté n\'est pas un ArrayBuffer.', result);
-                    }
-                },
-                options
-            );
+            exporter.parse(scene, (result) => {
+                const blob = new Blob([result], { type: 'model/gltf-binary' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'model.glb';
+                link.click();
+                console.log('Exportation réussie.');
+            }, options);
         });
     </script>
 </body>
